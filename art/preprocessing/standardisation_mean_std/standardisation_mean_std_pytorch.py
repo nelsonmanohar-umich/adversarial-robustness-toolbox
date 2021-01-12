@@ -19,9 +19,13 @@
 This module implements the standardisation with mean and standard deviation.
 """
 import logging
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Sequence, Tuple, Union
 
+import numpy as np
+
+from art.config import ART_NUMPY_DTYPE
 from art.preprocessing.preprocessing import PreprocessorPyTorch
+from art.preprocessing.standardisation_mean_std.utils import broadcastable_mean_std
 
 if TYPE_CHECKING:
     import torch
@@ -38,8 +42,8 @@ class StandardisationMeanStdPyTorch(PreprocessorPyTorch):
 
     def __init__(
         self,
-        mean: float = 0.0,
-        std: float = 1.0,
+        mean: Union[float, Sequence, np.ndarray] = 0.0,
+        std: Union[float, Sequence, np.ndarray] = 1.0,
         apply_fit: bool = True,
         apply_predict: bool = True,
         device_type: str = "gpu",
@@ -53,8 +57,8 @@ class StandardisationMeanStdPyTorch(PreprocessorPyTorch):
         import torch  # lgtm [py/repeated-import]
 
         super().__init__(is_fitted=True, apply_fit=apply_fit, apply_predict=apply_predict)
-        self.mean = mean
-        self.std = std
+        self.mean = np.asarray(mean, dtype=ART_NUMPY_DTYPE)
+        self.std = np.asarray(std, dtype=ART_NUMPY_DTYPE)
         self._check_params()
 
         # Set device
@@ -69,14 +73,16 @@ class StandardisationMeanStdPyTorch(PreprocessorPyTorch):
     ) -> Tuple["torch.Tensor", Optional["torch.Tensor"]]:
         """
         Apply standardisation with mean and standard deviation to input `x`.
+
+        :param x: Input data for which the gradient is estimated. First dimension is the batch size.
+        :param grad: Gradient value so far.
+        :return: The gradient (estimate) of the defence.
         """
         import torch  # lgtm [py/repeated-import]
 
-        mean = torch.tensor(self.mean, device=self._device)
-        std = torch.tensor(self.std, device=self._device)
-
-        x_norm = x - mean
-        x_norm = x_norm / std
+        mean, std = broadcastable_mean_std(x, self.mean, self.std)
+        x_norm = x - torch.tensor(mean, device=self._device)
+        x_norm = x_norm / torch.tensor(std, device=self._device)
 
         return x_norm, y
 

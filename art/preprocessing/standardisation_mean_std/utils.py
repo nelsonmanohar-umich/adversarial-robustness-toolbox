@@ -15,43 +15,34 @@
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+"""
+This module implements utilities for standardisation with mean and standard deviation.
+"""
+
+from typing import Tuple
+
 import numpy as np
-import pytest
 
 
-@pytest.fixture
-def image_batch(channels_first):
+def broadcastable_mean_std(x: np.ndarray, mean: np.ndarray, std: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Image fixture of shape NHWC and NCHW.
+    Ensure that the mean and standard deviation are broadcastable with respect to input `x`.
+
+    :param x: Input samples to standardise of shapes `NCHW`, `NHWC`, `NCFHW` or `NFHWC`.
+    :param mean: Mean.
+    :param std: Standard Deviation.
     """
-    test_input = np.repeat(np.array(range(6)).reshape(6, 1), 24, axis=1).reshape((2, 3, 4, 6))
-    if not channels_first:
-        test_input = np.transpose(test_input, (0, 2, 3, 1))
-    test_output = test_input.copy()
-    return test_input, test_output
+    if mean.shape != std.shape:
+        raise ValueError("The shape of mean and the standard deviation must be identical.")
 
+    # catch non-broadcastable input, when mean and std are vectors
+    if mean.ndim == 1 and mean.shape[0] > 1 and mean.shape[0] != x.shape[-1]:
+        # allow input shapes NC* (batch) and C* (non-batch)
+        channel_idx = 1 if x.shape[1] == mean.shape[0] else 0
+        broadcastable_shape = [1] * x.ndim
+        broadcastable_shape[channel_idx] = mean.shape[0]
 
-@pytest.fixture
-def image_batch_small():
-    """Create image fixture of shape (batch_size, channels, width, height)."""
-    return np.zeros((2, 1, 4, 4))
-
-
-@pytest.fixture
-def video_batch(channels_first):
-    """
-    Video fixture of shape NFHWC and NCFHW.
-    """
-    test_input = np.repeat(np.array(range(6)).reshape(6, 1), 24, axis=1).reshape((1, 3, 2, 4, 6))
-    if not channels_first:
-        test_input = np.transpose(test_input, (0, 2, 3, 4, 1))
-    test_output = test_input.copy()
-    return test_input, test_output
-
-
-@pytest.fixture
-def tabular_batch():
-    """
-    Create tabular data fixture of shape (batch_size, features).
-    """
-    return np.zeros((2, 4))
+        # expand mean and std to new shape
+        mean = mean.reshape(broadcastable_shape)
+        std = std.reshape(broadcastable_shape)
+    return mean, std
